@@ -9,7 +9,7 @@ export interface SyncStore {
    * Runs `work` atomically: commits if it resolves, rolls back every write
    * if it throws, and rethrows the error.
    */
-  transaction<T>(work: (tx: SyncTransaction) => Promise<T>): Promise<T>;
+  transaction<T>(work: (tx: SyncTransaction) => Promise<T>, noteId?: string): Promise<T>;
 
   /** Current committed state of a note (R10). */
   getNote(noteId: string): Promise<Note | null>;

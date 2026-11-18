@@ -40,7 +40,7 @@ export async function processOperation(
         const receipt = await tx.findReceipt(operation.opId);
         const note = await tx.findNote(operation.noteId);
         return apply(tx, decide(operation, receipt, note));
-      });
+      }, operation.noteId);
     } catch (error) {
       if (!(error instanceof LostRaceError)) throw error;
     }
