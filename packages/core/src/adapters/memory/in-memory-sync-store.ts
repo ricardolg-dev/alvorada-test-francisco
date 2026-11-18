@@ -7,8 +7,8 @@ import type { Note, Receipt } from "../../domain/types.js";
 /**
  * Reference adapter with no dependencies (ADR 0002, 0009).
  *
- * - Transactions are serialized by a promise-chain mutex: with async/await, two
- *   requests could otherwise interleave at every `await`, even on one thread.
+ * - Transactions for the same note are serialized by a promise-chain mutex.
+ *   Transactions for different notes can progress independently.
  * - Writes are staged and only copied to the committed maps if the work resolves,
  *   so a thrown error rolls everything back.
  * - Every value crossing the boundary is cloned, so callers can't mutate stored state.
@@ -16,11 +16,16 @@ import type { Note, Receipt } from "../../domain/types.js";
 export class InMemorySyncStore implements SyncStore {
   readonly #notes = new Map<string, Note>();
   readonly #receipts = new Map<string, Receipt>();
-  #tail: Promise<unknown> = Promise.resolve();
+  readonly #tails = new Map<string | undefined, Promise<unknown>>();
 
-  transaction<T>(work: (tx: SyncTransaction) => Promise<T>): Promise<T> {
-    const run = this.#tail.then(() => this.#runIsolated(work));
-    this.#tail = run.catch(() => undefined);
+  transaction<T>(work: (tx: SyncTransaction) => Promise<T>, noteId?: string): Promise<T> {
+    const previous = this.#tails.get(noteId) ?? Promise.resolve();
+    const run = previous.then(() => this.#runIsolated(work));
+    const settled = run.catch(() => undefined);
+    this.#tails.set(noteId, settled);
+    void settled.then(() => {
+      if (this.#tails.get(noteId) === settled) this.#tails.delete(noteId);
+    });
     return run;
   }
 
